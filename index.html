@@ -36,6 +36,7 @@ button:hover { background:#333; }
 </div>
 <div id="summary"></div>
 <div id="stageContainer"></div>
+
 <script>
 const stages=['СОГНУТЫ','СВАРЕНЫ','УПАКОВАНЫ'];
 const productsCatalog={
@@ -45,20 +46,110 @@ const productsCatalog={
   'СТЕЛАЖ':['—'],
   'РУКОМОЙНИК':['—']
 };
-let currentShift={},currentSha='',activeStage=stages[0];
-const stageSelectEl=document.getElementById('stageSelect'); stages.forEach(s=>{const opt=document.createElement('option');opt.value=s;opt.textContent=s;stageSelectEl.appendChild(opt);}); stageSelectEl.value=activeStage; stageSelectEl.addEventListener('change',()=>{activeStage=stageSelectEl.value; renderStage();});
-const categorySelect=document.getElementById('categorySelect'); const productSelect=document.getElementById('productSelect');
+
+let currentShift={}, currentSha='', activeStage=stages[0];
+
+const stageSelectEl=document.getElementById('stageSelect'); 
+stages.forEach(s=>{const opt=document.createElement('option');opt.value=s;opt.textContent=s;stageSelectEl.appendChild(opt);}); 
+stageSelectEl.value=activeStage; 
+stageSelectEl.addEventListener('change',()=>{activeStage=stageSelectEl.value; renderStage();});
+
+const categorySelect=document.getElementById('categorySelect'); 
+const productSelect=document.getElementById('productSelect');
 for(let cat in productsCatalog){const opt=document.createElement('option');opt.value=cat;opt.textContent=cat;categorySelect.appendChild(opt);}
 function updateProductSelect(){ const cat=categorySelect.value; productSelect.innerHTML=''; productsCatalog[cat].forEach(p=>{const opt=document.createElement('option');opt.value=p;opt.textContent=p; productSelect.appendChild(opt);});}
 categorySelect.addEventListener('change',updateProductSelect); updateProductSelect();
-document.getElementById('addProductBtn').addEventListener('click',()=>{ const cat=categorySelect.value,prod=productSelect.value,qty=parseInt(document.getElementById('productQty').value); if(activeStage==='СВАРЕНЫ'){if(cat==='ПОЛКИ НАВЕСНЫЕ'&&prod!=='1500x300'){alert('На этапе СВАРЕНЫ эта полка недоступна');return;} if(cat==='СТЕЛАЖ'){alert('Стеллаж недоступен на этапе СВАРЕНЫ');return;}} if(!currentShift[cat])currentShift[cat]={}; if(!currentShift[cat][prod])currentShift[cat][prod]={СОГНУТЫ:0,СВАРЕНЫ:0,УПАКОВАНЫ:0}; currentShift[cat][prod][activeStage]+=qty; renderStage(); });
-document.getElementById('newShiftBtn').addEventListener('click',()=>{if(confirm('Начать новую смену?')){currentShift={}; currentSha=''; renderStage();}});
-document.getElementById('saveBtn').addEventListener('click',saveShift);
-async function loadShift(){ try{ const res=await fetch('/api/loadShift'); const data=await res.json(); currentShift=data.shift; currentSha=data.sha; renderStage(); } catch(e){ alert('Ошибка загрузки: '+e.message); } }
-async function saveShift(){ try{ const res=await fetch('/api/saveShift',{method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify({shift:currentShift,sha:currentSha})}); const data=await res.json(); if(data.message){alert(data.message); if(data.sha) currentSha=data.sha;} if(data.error&&data.error.includes('sha')){alert('Файл обновился, данные будут перезагружены.'); await loadShift();} }catch(e){alert('Ошибка сохранения: '+e.message);} }
-function renderSummary(){let counts={СОГНУТЫ:0,СВАРЕНЫ:0,УПАКОВАНЫ:0}; for(let cat in currentShift){for(let prod in currentShift[cat]){stages.forEach(s=>counts[s]+=currentShift[cat][prod][s]);}} document.getElementById('summary').textContent=`СОГНУТЫ: ${counts.СОГНУТЫ} | СВАРЕНЫ: ${counts.СВАРЕНЫ} | УПАКОВАНЫ: ${counts.УПАКОВАНЫ}`;}
-function renderStage(){ const container=document.getElementById('stageContainer'); container.innerHTML=''; renderSummary(); for(let cat in currentShift){for(let prod in currentShift[cat]){ const card=document.createElement('div'); card.className='card'; const total=stages.reduce((sum,s)=>sum+currentShift[cat][prod][s],0); const stageVal=currentShift[cat][prod][activeStage]; const percent=total?Math.min(100,Math.round(stageVal/total*100)):0; if(percent===100) card.classList.add('green'); else if(percent>0) card.classList.add('yellow'); const color=activeStage==='СОГНУТЫ'?'#00bfff':activeStage==='СВАРЕНЫ'?'#ffa500':'#00ff00'; card.innerHTML=`<div class="card-title">${cat} - ${prod}</div><input type="number" min="0" value="${stageVal}" data-cat="${cat}" data-prod="${prod}" style="width:60px"><div class="progress-bar"><div class="progress-fill" style="width:${percent}%; background-color:${color}"></div></div>`; container.appendChild(card); } }
-container.querySelectorAll('input[type="number"]').forEach(input=>{ input.addEventListener('input',e=>{ const cat=e.target.dataset.cat, prod=e.target.dataset.prod; let val=parseInt(e.target.value); if(isNaN(val)||val<0) val=0; e.target.value=val; currentShift[cat][prod][activeStage]=val; const total=stages.reduce((sum,s)=>sum+currentShift[cat][prod][s],0); const stageVal=currentShift[cat][prod][activeStage]; const percent=total?Math.min(100,Math.round(stageVal/total*100)):0; e.target.parentElement.querySelector('.progress-fill').style.width=percent+'%'; });});}
+
+document.getElementById('addProductBtn').addEventListener('click',()=>{
+  const cat=categorySelect.value, prod=productSelect.value, qty=parseInt(document.getElementById('productQty').value);
+  if(activeStage==='СВАРЕНЫ'){
+    if(cat==='ПОЛКИ НАВЕСНЫЕ'&&prod!=='1500x300'){alert('На этапе СВАРЕНЫ эта полка недоступна'); return;}
+    if(cat==='СТЕЛАЖ'){alert('Стеллаж недоступен на этапе СВАРЕНЫ'); return;}
+  }
+  if(!currentShift[cat]) currentShift[cat]={};
+  if(!currentShift[cat][prod]) currentShift[cat][prod]={СОГНУТЫ:0,СВАРЕНЫ:0,УПАКОВАНЫ:0};
+  currentShift[cat][prod][activeStage]+=qty;
+  renderStage();
+});
+
+document.getElementById('newShiftBtn').addEventListener('click',()=>{
+  if(confirm('Начать новую смену?')){
+    currentShift={};
+    currentSha='';
+    renderStage();
+  }
+});
+
+document.getElementById('saveBtn').addEventListener('click', saveShift);
+
+async function loadShift(){
+  try{
+    const res = await fetch('/api/loadShift');
+    const data = await res.json();
+    currentShift = data.shift || {};
+    currentSha = data.sha || '';
+    renderStage();
+  } catch(e){
+    alert('Ошибка загрузки: '+e.message);
+  }
+}
+
+async function saveShift(){
+  if(!currentSha){
+    alert('Файл не загружен. Подождите и перезагрузите страницу.');
+    await loadShift();
+    return;
+  }
+  try{
+    const res = await fetch('/api/saveShift',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ shift: currentShift, sha: currentSha })
+    });
+    const data = await res.json();
+    if(data.message){
+      alert(data.message);
+      if(data.sha) currentSha = data.sha;
+    } else if(data.error){
+      alert('Ошибка: '+JSON.stringify(data.error));
+      await loadShift(); // обновим SHA
+    }
+  } catch(e){ alert('Ошибка сохранения: '+e.message); }
+}
+
+function renderSummary(){
+  let counts={СОГНУТЫ:0,СВАРЕНЫ:0,УПАКОВАНЫ:0};
+  for(let cat in currentShift){for(let prod in currentShift[cat]){stages.forEach(s=>counts[s]+=currentShift[cat][prod][s]);}}
+  document.getElementById('summary').textContent=`СОГНУТЫ: ${counts.СОГНУТЫ} | СВАРЕНЫ: ${counts.СВАРЕНЫ} | УПАКОВАНЫ: ${counts.УПАКОВАНЫ}`;
+}
+
+function renderStage(){
+  const container=document.getElementById('stageContainer'); container.innerHTML=''; renderSummary();
+  for(let cat in currentShift){for(let prod in currentShift[cat]){
+    const card=document.createElement('div'); card.className='card';
+    const total=stages.reduce((sum,s)=>sum+currentShift[cat][prod][s],0);
+    const stageVal=currentShift[cat][prod][activeStage];
+    const percent=total?Math.min(100,Math.round(stageVal/total*100)):0;
+    if(percent===100) card.classList.add('green'); else if(percent>0) card.classList.add('yellow');
+    const color=activeStage==='СОГНУТЫ'?'#00bfff':activeStage==='СВАРЕНЫ'?'#ffa500':'#00ff00';
+    card.innerHTML=`<div class="card-title">${cat} - ${prod}</div>
+      <input type="number" min="0" value="${stageVal}" data-cat="${cat}" data-prod="${prod}" style="width:60px">
+      <div class="progress-bar"><div class="progress-fill" style="width:${percent}%; background-color:${color}"></div></div>`;
+    container.appendChild(card);
+  }}
+  container.querySelectorAll('input[type="number"]').forEach(input=>{
+    input.addEventListener('input', e=>{
+      const cat=e.target.dataset.cat, prod=e.target.dataset.prod;
+      let val=parseInt(e.target.value); if(isNaN(val)||val<0) val=0; e.target.value=val;
+      currentShift[cat][prod][activeStage]=val;
+      const total=stages.reduce((sum,s)=>sum+currentShift[cat][prod][s],0);
+      const stageVal=currentShift[cat][prod][activeStage];
+      const percent=total?Math.min(100,Math.round(stageVal/total*100)):0;
+      e.target.parentElement.querySelector('.progress-fill').style.width=percent+'%';
+    });
+  });
+}
+
 loadShift();
 </script>
 </body>
